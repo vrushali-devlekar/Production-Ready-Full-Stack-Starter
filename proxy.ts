@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { isClerkConfiguredKey } from "@/lib/auth-helpers";
 
 // Define pages that require authentication
 const isProtectedRoute = createRouteMatcher([
@@ -6,11 +7,16 @@ const isProtectedRoute = createRouteMatcher([
   "/settings(.*)",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    await auth.protect();
+export function proxy(req: any, ev: any) {
+  if (!isClerkConfiguredKey()) {
+    return;
   }
-});
+  return clerkMiddleware(async (auth, req) => {
+    if (isProtectedRoute(req)) {
+      await auth.protect();
+    }
+  })(req, ev);
+}
 
 export const config = {
   matcher: [

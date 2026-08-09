@@ -38,68 +38,107 @@ export async function POST(req: Request) {
       }
 
       // Retrieve subscription details from Stripe
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const subscription = (await stripe.subscriptions.retrieve(subscriptionId)) as any;
 
       const userEmail = checkoutSession.customer_details?.email || "";
       const userName = checkoutSession.customer_details?.name || "";
 
-      // Ensure user exists in our DB
-      await prisma.user.upsert({
-        where: { id: userId },
+      // Ensure user exists in our DB (look up by clerkUserId)
+      const user = await prisma.user.upsert({
+        where: { clerkUserId: userId },
         update: {
           email: userEmail,
           name: userName || undefined,
+          stripeCustomerId: customerId,
         },
         create: {
-          id: userId,
+          clerkUserId: userId,
           email: userEmail,
           name: userName || undefined,
+          stripeCustomerId: customerId,
         },
       });
 
-      // Update or create subscription details
+      // Update or create subscription details linked to user.id
       await prisma.subscription.upsert({
-        where: { userId },
+        where: { userId: user.id },
         update: {
           stripeSubscriptionId: subscriptionId,
-          stripeCustomerId: customerId,
           stripePriceId: subscription.items.data[0].price.id,
           status: subscription.status,
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
         },
         create: {
-          userId,
+          userId: user.id,
           stripeSubscriptionId: subscriptionId,
-          stripeCustomerId: customerId,
           stripePriceId: subscription.items.data[0].price.id,
           status: subscription.status,
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        },
+      });
+
+      // Add audit log
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: "SUBSCRIPTION_CREATED",
+          details: `Stripe checkout completed. Subscription ID: ${subscriptionId}`,
         },
       });
     }
 
     if (event.type === "customer.subscription.updated") {
-      const subscription = event.data.object as Stripe.Subscription;
+      const subscription = event.data.object as any;
       
-      await prisma.subscription.updateMany({
+      const dbSubscription = await prisma.subscription.findUnique({
         where: { stripeSubscriptionId: subscription.id },
-        data: {
-          stripePriceId: subscription.items.data[0].price.id,
-          status: subscription.status,
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-        },
       });
+
+      if (dbSubscription) {
+        await prisma.subscription.update({
+          where: { id: dbSubscription.id },
+          data: {
+            stripePriceId: subscription.items.data[0].price.id,
+            status: subscription.status,
+            stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          },
+        });
+
+        // Add audit log
+        await prisma.auditLog.create({
+          data: {
+            userId: dbSubscription.userId,
+            action: "SUBSCRIPTION_UPDATED",
+            details: `Subscription status updated to: ${subscription.status}`,
+          },
+        });
+      }
     }
 
     if (event.type === "customer.subscription.deleted") {
-      const subscription = event.data.object as Stripe.Subscription;
+      const subscription = event.data.object as any;
 
-      await prisma.subscription.updateMany({
+      const dbSubscription = await prisma.subscription.findUnique({
         where: { stripeSubscriptionId: subscription.id },
-        data: {
-          status: subscription.status,
-        },
       });
+
+      if (dbSubscription) {
+        await prisma.subscription.update({
+          where: { id: dbSubscription.id },
+          data: {
+            status: subscription.status,
+          },
+        });
+
+        // Add audit log
+        await prisma.auditLog.create({
+          data: {
+            userId: dbSubscription.userId,
+            action: "SUBSCRIPTION_DELETED",
+            details: `Subscription status changed to: ${subscription.status}`,
+          },
+        });
+      }
     }
 
     return new NextResponse(null, { status: 200 });

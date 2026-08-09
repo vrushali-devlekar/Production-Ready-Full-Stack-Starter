@@ -1,11 +1,11 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { Sparkles, CreditCard, Layers, Zap, Calendar, TrendingUp, ShieldAlert, CheckCircle } from "lucide-react";
+import { Sparkles, CreditCard, Layers, Zap, Calendar, TrendingUp, ShieldAlert, CheckCircle, Info } from "lucide-react";
 import { createCheckoutSession } from "@/app/actions/stripe";
 
 export default async function DashboardPage() {
-  const { userId } = await auth();
+  const { userId, user, isDemo } = await getAuthUser();
   
   if (!userId) {
     return (
@@ -15,17 +15,22 @@ export default async function DashboardPage() {
     );
   }
 
-  const user = await currentUser();
+  // Retrieve user and their subscription from DB using clerkUserId safely
+  let dbUser = null;
+  try {
+    dbUser = await prisma.user.findUnique({
+      where: { clerkUserId: userId },
+      include: { subscription: true },
+    });
+  } catch (err) {
+    console.warn("Database user lookup skipped or uninitialized:", err);
+  }
 
-  // Retrieve user's subscription from DB
-  const subscription = await prisma.subscription.findUnique({
-    where: { userId },
-  });
-
+  const subscription = dbUser?.subscription;
   const isPro = subscription?.status === "active";
   const currentPlan = isPro ? "Pro Plan" : "Free Plan";
-  const expiryDate = subscription?.currentPeriodEnd
-    ? new Date(subscription.currentPeriodEnd).toLocaleDateString("en-US", {
+  const expiryDate = subscription?.stripeCurrentPeriodEnd
+    ? new Date(subscription.stripeCurrentPeriodEnd).toLocaleDateString("en-US", {
         month: "long",
         day: "numeric",
         year: "numeric",
@@ -56,6 +61,15 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      {isDemo && (
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs sm:text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+          <Info className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div>
+            <span className="font-semibold">Demo Preview Mode:</span> Clerk publishable key in <code className="font-mono font-bold bg-amber-100 dark:bg-amber-900/50 px-1 py-0.5 rounded">.env</code> is using a placeholder. You are viewing the live frontend dashboard preview!
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="md:flex md:items-center md:justify-between border-b border-zinc-200 pb-6 dark:border-zinc-800">
         <div className="min-w-0 flex-1">

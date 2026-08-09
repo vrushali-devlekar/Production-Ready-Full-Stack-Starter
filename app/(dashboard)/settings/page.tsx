@@ -1,10 +1,10 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { getAuthUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { createCustomerPortalSession, createCheckoutSession } from "@/app/actions/stripe";
-import { CreditCard, Shield, User, ExternalLink, Zap, Mail, Calendar } from "lucide-react";
+import { CreditCard, Shield, User, ExternalLink, Zap, Mail, Calendar, Info } from "lucide-react";
 
 export default async function SettingsPage() {
-  const { userId } = await auth();
+  const { userId, user, isDemo } = await getAuthUser();
 
   if (!userId) {
     return (
@@ -14,16 +14,22 @@ export default async function SettingsPage() {
     );
   }
 
-  const user = await currentUser();
+  // Look up user and subscription by clerkUserId safely
+  let dbUser = null;
+  try {
+    dbUser = await prisma.user.findUnique({
+      where: { clerkUserId: userId },
+      include: { subscription: true },
+    });
+  } catch (err) {
+    console.warn("Database user lookup skipped or uninitialized:", err);
+  }
 
-  const subscription = await prisma.subscription.findUnique({
-    where: { userId },
-  });
-
+  const subscription = dbUser?.subscription;
   const isPro = subscription?.status === "active";
   const currentPlan = isPro ? "Pro Plan" : "Free Plan";
-  const expiryDate = subscription?.currentPeriodEnd
-    ? new Date(subscription.currentPeriodEnd).toLocaleDateString("en-US", {
+  const expiryDate = subscription?.stripeCurrentPeriodEnd
+    ? new Date(subscription.stripeCurrentPeriodEnd).toLocaleDateString("en-US", {
         month: "long",
         day: "numeric",
         year: "numeric",

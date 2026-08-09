@@ -17,21 +17,55 @@ export async function createCheckoutSession() {
 
   let customerId: string | undefined;
 
-  // Check if we already have a customer record for this user in Prisma
-  const existingSub = await prisma.subscription.findUnique({
-    where: { userId },
+  // Retrieve user by clerkUserId
+  let dbUser = await prisma.user.findUnique({
+    where: { clerkUserId: userId },
+    include: { subscription: true },
   });
 
-  if (existingSub?.stripeCustomerId) {
-    customerId = existingSub.stripeCustomerId;
-  } else {
-    // Create stripe customer if not exists
+  if (!dbUser) {
+    // Create customer in Stripe
     const customer = await stripe.customers.create({
       email,
       name: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || undefined,
-      metadata: { userId },
+      metadata: { clerkUserId: userId },
     });
     customerId = customer.id;
+
+    // Create user record in DB
+    dbUser = await prisma.user.create({
+      data: {
+        clerkUserId: userId,
+        email,
+        name: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || undefined,
+        stripeCustomerId: customerId,
+      },
+      include: { subscription: true },
+    });
+
+    // Log the user registration action
+    await prisma.auditLog.create({
+      data: {
+        userId: dbUser.id,
+        action: "USER_REGISTERED",
+        details: "User registered via clerk authentication.",
+      },
+    });
+  } else {
+    customerId = dbUser.stripeCustomerId || undefined;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email,
+        name: dbUser.name || undefined,
+        metadata: { clerkUserId: userId },
+      });
+      customerId = customer.id;
+      dbUser = await prisma.user.update({
+        where: { id: dbUser.id },
+        data: { stripeCustomerId: customerId },
+        include: { subscription: true },
+      });
+    }
   }
 
   const priceId = process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID;
@@ -71,16 +105,17 @@ export async function createCustomerPortalSession() {
     redirect("/sign-in");
   }
 
-  const subscription = await prisma.subscription.findUnique({
-    where: { userId },
+  const dbUser = await prisma.user.findUnique({
+    where: { clerkUserId: userId },
+    include: { subscription: true },
   });
 
-  if (!subscription || !subscription.stripeCustomerId) {
+  if (!dbUser || !dbUser.stripeCustomerId) {
     redirect("/dashboard?error=no_subscription");
   }
 
   const portalSession = await stripe.billingPortal.sessions.create({
-    customer: subscription.stripeCustomerId,
+    customer: dbUser.stripeCustomerId,
     return_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/settings`,
   });
 

@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import { UserButton, SignInButton, Show } from "@clerk/nextjs";
 import { Sparkles, LayoutDashboard, Settings, Menu, X } from "lucide-react";
 import { useState } from "react";
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const isClerkValid = Boolean(
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
+      !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.includes("xxxxxxxxxxxxxxxxxxxxxxxxxx")
+  );
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-zinc-200/80 bg-white/70 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/70">
@@ -30,33 +34,62 @@ export function Navbar() {
             <Link href="/#pricing" className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors">
               Pricing
             </Link>
-            <SignedIn>
-              <Link href="/dashboard" className="flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors">
-                <LayoutDashboard className="h-4 w-4" />
-                Dashboard
-              </Link>
-              <Link href="/settings" className="flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors">
-                <Settings className="h-4 w-4" />
-                Settings
-              </Link>
-            </SignedIn>
+
+            {isClerkValid ? (
+              <Show when="signed-in">
+                <Link href="/dashboard" className="flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors">
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </Link>
+                <Link href="/settings" className="flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors">
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </Link>
+              </Show>
+            ) : (
+              <>
+                <Link href="/dashboard" className="flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors">
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </Link>
+                <Link href="/settings" className="flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors">
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </Link>
+              </>
+            )}
           </nav>
 
           {/* Authentication & Profile */}
           <div className="hidden md:flex items-center gap-4">
-            <SignedOut>
-              <SignInButton mode="modal">
-                <button className="cursor-pointer text-sm font-medium text-zinc-700 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white transition-colors">
-                  Sign In
-                </button>
-              </SignInButton>
-              <Link href="/sign-up" className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-all shadow-sm">
-                Get Started
-              </Link>
-            </SignedOut>
-            <SignedIn>
-              <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "h-9 w-9" } }} />
-            </SignedIn>
+            {isClerkValid ? (
+              <Show
+                when="signed-in"
+                fallback={
+                  <div className="flex items-center gap-4">
+                    <SignInButton mode="modal">
+                      <button className="cursor-pointer text-sm font-medium text-zinc-700 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white transition-colors">
+                        Sign In
+                      </button>
+                    </SignInButton>
+                    <Link href="/sign-up" className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-all shadow-sm">
+                      Get Started
+                    </Link>
+                  </div>
+                }
+              >
+                <UserButton appearance={{ elements: { avatarBox: "h-9 w-9" } }} />
+              </Show>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                  Demo Mode
+                </span>
+                <Link href="/dashboard" className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-all shadow-sm">
+                  View Dashboard →
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -90,44 +123,31 @@ export function Navbar() {
             >
               Pricing
             </Link>
-            <SignedIn>
-              <Link
-                href="/dashboard"
-                onClick={() => setIsOpen(false)}
-                className="block rounded-md px-3 py-2 text-base font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/settings"
-                onClick={() => setIsOpen(false)}
-                className="block rounded-md px-3 py-2 text-base font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
-              >
-                Settings
-              </Link>
-            </SignedIn>
-            <div className="border-t border-zinc-100 pt-4 pb-2 dark:border-zinc-800 flex flex-col gap-2">
-              <SignedOut>
-                <SignInButton mode="modal">
-                  <button className="w-full text-left rounded-md px-3 py-2 text-base font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50">
-                    Sign In
-                  </button>
-                </SignInButton>
+            <Link
+              href="/dashboard"
+              onClick={() => setIsOpen(false)}
+              className="block rounded-md px-3 py-2 text-base font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/settings"
+              onClick={() => setIsOpen(false)}
+              className="block rounded-md px-3 py-2 text-base font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
+            >
+              Settings
+            </Link>
+            {!isClerkValid && (
+              <div className="pt-2">
                 <Link
-                  href="/sign-up"
+                  href="/dashboard"
                   onClick={() => setIsOpen(false)}
-                  className="block text-center rounded-md bg-zinc-900 px-3 py-2 text-base font-medium text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  className="block text-center rounded-md bg-indigo-600 px-3 py-2 text-base font-medium text-white hover:bg-indigo-500"
                 >
-                  Get Started
+                  View Dashboard (Demo)
                 </Link>
-              </SignedOut>
-              <SignedIn>
-                <div className="px-3 py-2 flex items-center justify-between">
-                  <span className="text-sm font-medium text-zinc-500">Account</span>
-                  <UserButton afterSignOutUrl="/" />
-                </div>
-              </SignedIn>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
